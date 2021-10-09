@@ -1,7 +1,7 @@
 
-function GetMouseVMR(name_prefix, tgt_file_name_prefix, tgt_set)
+function velthresh_GetMouseVMR(name_prefix, tgt_file_name_prefix, tgt_set)
 % Easiest way to test the game is to copy and paste: 
-% GetMouseVMR('dummy', 'demo', '1') into command window
+% velthresh_GetMouseVMR('dummy', 'demo', '1') into command window
 
 % Include this line so program can run
 Screen('Preference', 'SkipSyncTests', 1);
@@ -228,6 +228,7 @@ trial_move = nan(MAX_SAMPLES,1);
 start_x_move = nan(MAX_SAMPLES,1);
 start_y_move = nan(MAX_SAMPLES,1);
 rotation_move = nan(MAX_SAMPLES,1);
+hand_dist_all = nan(MAX_SAMPLES,1);
 
 tic;
 begintime = GetSecs;
@@ -284,6 +285,10 @@ while trial <= maxtrialnum;   %
     thePoints(k,:) = [hX hY]; % record full precision points
     
     hand_dist = sqrt((hX-xCenter)^2 + (hY-yCenter)^2);
+    hand_dist_all(k) = hand_dist;
+    if k > 1
+        delta_hand_dist = abs(hand_dist_all(k) - hand_dist_all(k-1));
+    end
     
     % ROTATED CURSOR (including clamp)
     if clamped_feedback(trial,1) == 1
@@ -326,6 +331,7 @@ while trial <= maxtrialnum;   %
         if inside ==  1 && insidetime > wait_time
             gamephase = 1;
             insidetime = 0;
+            t0 = t(k);
         end
     
     elseif gamephase == 1;  % Show target
@@ -340,11 +346,24 @@ while trial <= maxtrialnum;   %
         Screen('DrawDots', window, tgtloc(trial,:), targetsize, blue, [], 2);
         
         rt = rt + dt;               
-        if hand_dist >  rt_dist_thresh 
-            RTs(trial) = rt;
-            gamephase = 2;
-        end 
-          
+%         if hand_dist >  rt_dist_thresh 
+%             RTs(trial) = rt;
+%             gamephase = 2;
+%         end
+        
+        if  delta_hand_dist > 0
+            t_between_samples = t(k) - t0;
+            hand_vel = delta_hand_dist / t_between_samples;
+            if hand_vel > 50/mm2pixel
+                RTs(trial) = rt;
+                gamephase = 2;
+                t0 = t(k);
+            else
+                t0 = t(k);
+            end
+        end
+            
+            
     elseif gamephase == 2;  % Moving towards target
         visible = online_fb(trial,1);
         mt = mt + dt;
@@ -356,28 +375,50 @@ while trial <= maxtrialnum;   %
         end
         
         Screen('DrawDots', window, tgtloc(trial,:), targetsize, blue, [], 2);
-      
-        if hand_dist >= tgt_dist(trial,1)
-            fb_angle = atan2d(rcY-yCenter, rcX-xCenter);
-            fb_x = tgt_dist(trial,1)*cosd(fb_angle) + xCenter;
-            fb_y = tgt_dist(trial,1)*sind(fb_angle) + yCenter;
-            
-            hand_angle(trial,1) = atan2d((hY-yCenter)*(-1), hX-xCenter);
-            
-            if MTs(trial) <= 0.3
-                PsychPortAudio('Start', pasound3, 1, 0, 0); % the last input argument '0' instructs Matlab to execute code immediately
-            elseif MTs(trial) > 0.3
-                PsychPortAudio('Start', pasound2, 1, 0, 0);
-            end
-            
-            if sqrt((fb_x - tgtx).^2 + (fb_y - tgty).^2) <= hit_tolerance
-                hits = hits + 1;    % Make sure this is correct
+              
+        if  delta_hand_dist > 0
+            t_between_samples = t(k) - t0;
+            hand_vel = delta_hand_dist / t_between_samples;
+            if hand_vel < 50/mm2pixel
+                fb_angle = atan2d(rcY-yCenter, rcX-xCenter);
+                fb_x = hand_dist_all(k)*cosd(fb_angle) + xCenter;
+                fb_y = hand_dist_all(k)*sind(fb_angle) + yCenter;
+                
+                hand_angle(trial,1) = atan2d((hY-yCenter)*(-1), hX-xCenter);
+                
+                if MTs(trial) <= 0.3
+                    PsychPortAudio('Start', pasound3, 1, 0, 0); % the last input argument '0' instructs Matlab to execute code immediately
+                elseif MTs(trial) > 0.3
+                    PsychPortAudio('Start', pasound2, 1, 0, 0);
+                end
+                visible = 0;
+                gamephase = 3;
             else
-                hits = hits;
+                t0 = t(k);
             end
-            visible = 0;
-            gamephase = 3;          
         end
+        
+%         if hand_dist >= tgt_dist(trial,1)
+%             fb_angle = atan2d(rcY-yCenter, rcX-xCenter);
+%             fb_x = tgt_dist(trial,1)*cosd(fb_angle) + xCenter;
+%             fb_y = tgt_dist(trial,1)*sind(fb_angle) + yCenter;
+%             
+%             hand_angle(trial,1) = atan2d((hY-yCenter)*(-1), hX-xCenter);
+%             
+%             if MTs(trial) <= 0.3
+%                 PsychPortAudio('Start', pasound3, 1, 0, 0); % the last input argument '0' instructs Matlab to execute code immediately
+%             elseif MTs(trial) > 0.3
+%                 PsychPortAudio('Start', pasound2, 1, 0, 0);
+%             end
+%             
+%             if sqrt((fb_x - tgtx).^2 + (fb_y - tgty).^2) <= hit_tolerance
+%                 hits = hits + 1;    % Make sure this is correct
+%             else
+%                 hits = hits;
+%             end
+%             visible = 0;
+%             gamephase = 3;          
+%         end
              
     elseif gamephase == 3;  % Endpoint feedback        
         visible = endpoint_fb(trial,1);
@@ -561,7 +602,7 @@ clear ding tooslow aim_img
 
 %
 % cd('C:\Dropbox\HYO_extSEC\Data')
-cd('/../../Data')
+cd('../../Data')
 
 % Save data
 name_prefix_all = [tgt_file_name_prefix,'_',name_prefix];
