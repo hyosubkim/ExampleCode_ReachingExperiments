@@ -134,6 +134,7 @@ Screen('BlendFunction', window, GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 start_tolerance = 10*mm2pixel;  % eventually change to 10
 startcirclewidth = 6*mm2pixel;
 rt_dist_thresh = 10*mm2pixel;
+rt_vel_thresh = 50*(1/mm2pixel);
 targetsize = 6*mm2pixel;
 ringsize = 16*mm2pixel;
 red = [255 0 0];
@@ -284,8 +285,11 @@ while trial <= maxtrialnum;   %
     
     thePoints(k,:) = [hX hY]; % record full precision points
     
+    %store radial hand distance
     hand_dist = sqrt((hX-xCenter)^2 + (hY-yCenter)^2);
     hand_dist_all(k) = hand_dist;
+    
+    %use initialized value for first sample
     if k > 1
         delta_hand_dist = abs(hand_dist_all(k) - hand_dist_all(k-1));
     end
@@ -350,11 +354,12 @@ while trial <= maxtrialnum;   %
 %             RTs(trial) = rt;
 %             gamephase = 2;
 %         end
-        
+        %check to see if you have a fresh sample; if so, compute hand vel
+        %and start RT clock once it crosses threshold
         if  delta_hand_dist > 0
             t_between_samples = t(k) - t0;
             hand_vel = delta_hand_dist / t_between_samples;
-            if hand_vel > 50/mm2pixel
+            if hand_vel > rt_vel_thresh
                 RTs(trial) = rt;
                 gamephase = 2;
                 t0 = t(k);
@@ -375,11 +380,12 @@ while trial <= maxtrialnum;   %
         end
         
         Screen('DrawDots', window, tgtloc(trial,:), targetsize, blue, [], 2);
-              
+        
+        %check to see when hand stops moving
         if  delta_hand_dist > 0
             t_between_samples = t(k) - t0;
             hand_vel = delta_hand_dist / t_between_samples;
-            if hand_vel < 50/mm2pixel
+            if hand_vel < rt_vel_thresh
                 fb_angle = atan2d(rcY-yCenter, rcX-xCenter);
                 fb_x = hand_dist_all(k)*cosd(fb_angle) + xCenter;
                 fb_y = hand_dist_all(k)*sind(fb_angle) + yCenter;
